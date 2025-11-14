@@ -1,0 +1,55 @@
+name: Generate Daily News Digest
+
+on:
+  # Schedule to run every day at 08:00 UTC
+  schedule:
+    - cron: '0 8 * * *'
+  # Allow manual triggering from the GitHub UI
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    # Set permissions for GITHUB_TOKEN to allow committing to the repo
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # Use a modern Python version
+
+      - name: Install ffmpeg (for MP3 conversion)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run script to generate digest
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }} # <-- Pass webhook to Python
+          # Pass the GitHub Pages URL to the Python script
+          GITHUB_REPO_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+        run: |
+          python main.py
+
+      - name: Commit and push new files
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Bot: Add daily news digest for $(date +'%Y-%m-%d')"
+          commit_options: '--amend' # This will group all changes into the last commit, useful for re-runs
+          file_pattern: 'docs/*' # Only commit changes in the docs directory
+          repository: '.'
+          push_options: '--force'
