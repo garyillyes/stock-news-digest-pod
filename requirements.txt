@@ -1,0 +1,6 @@
+# Core libraries needed to run the main.py script
+requests
+PyYAML
+google-generativeai # For Gemini API and TTS
+pydub # For converting WAV to MP3
+markdown # For converting digest markdown to HTML
