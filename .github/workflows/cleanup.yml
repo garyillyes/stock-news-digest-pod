@@ -1,0 +1,37 @@
+name: Cleanup Old News Digests
+
+on:
+  # Schedule to run on the 1st of every month at 03:00 UTC
+  schedule:
+    - cron: '0 3 1 * *'
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run cleanup script
+        run: |
+          python cleanup.py
+
+      - name: Commit and push deletions
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Bot: Cleanup old news digests"
+          commit_options: '--amend'
+          file_pattern: 'pages/*'
+          repository: '.'
+          push_options: '--force'

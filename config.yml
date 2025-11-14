@@ -1,0 +1,7 @@
+# Stock tickers to fetch news for.
+# Add or remove any symbols you want to track.
+tickers:
+  - "GOOG"
+  - "GOOGL"
+  - "VUG"
+  - "VT"
