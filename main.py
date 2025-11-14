@@ -163,12 +163,17 @@ def fetch_alpaca_news(tickers, alpaca_key, alpaca_secret):
         
         print(f"Successfully fetched {len(news_items)} news articles.")
         
-        # Consolidate news content
-        all_news_text = ""
+        # Consolidate news content into a structured list
+        structured_news = []
         for item in news_items:
-            all_news_text += f"Headline: {item['headline']}\nSummary: {item['summary']}\n\n"
+            structured_news.append({
+                "headline": item["headline"],
+                "summary": item["summary"],
+                "symbols": item["symbols"]
+            })
             
-        return all_news_text
+        # Return as a JSON string for clear separation in the prompt
+        return json.dumps(structured_news, indent=2)
         
     except requests.exceptions.RequestException as e:
         print(f"Error fetching Alpaca news: {e}")
@@ -190,15 +195,16 @@ def generate_digest(news_text, api_key):
     You are a financial news podcaster. Your task is to create a concise, informative, and engaging podcast script summarizing the following financial news articles.
     
     Instructions:
-    1.  Start with a brief, stern welcome (e.g., "This is your daily financial briefing.").
+    1.  Start with a brief, professional welcome (e.g., "This is your daily financial briefing.").
     2.  Provide a high-level overview of the market sentiment based on the news (e.g., "It was a mixed day for tech..." or "Positive news drove the energy sector...").
     3.  Summarize the 3-5 most important stories. For each, clearly state the company and the key news.
-    4.  Keep the entire script to a 3-5 minute read (around 500-750 words).
-    5.  End with a brief sign-off (e.g., "That's all for today. Check back tomorrow for your next update.").
-    6.  The tone should be professional, clear, and unbiased.
-    7.  **IMPORTANT:** Format your response in Markdown (e.g., use `###` for headlines, `**bold**` for emphasis, and paragraphs).
+    4.  **Crucially**, for each story, add a brief, insightful sentence explaining *why* this news is relevant to the specific stock tickers associated with it. For example: "This development is significant for GOOGL as it directly impacts their AI research division."
+    5.  Keep the entire script to a 3-5 minute read (around 500-750 words).
+    6.  End with a brief sign-off (e.g., "That's all for today. Check back tomorrow for your next update.").
+    7.  The tone should be professional, clear, and unbiased.
+    8.  **IMPORTANT:** Format your response in Markdown (e.g., use `###` for headlines, `**bold**` for emphasis, and paragraphs).
     
-    Here is the raw news content:
+    Here is the raw news content, formatted as a JSON array. Each object contains the headline, summary, and the stock symbols it relates to.
     ---
     {news_text}
     ---
