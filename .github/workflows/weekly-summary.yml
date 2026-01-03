@@ -37,12 +37,14 @@ jobs:
         run: |
           python weekly_summary.py
 
+      - name: Stage new files
+        run: git add docs/**
+
       - name: Commit and push new files
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Bot: Add weekly news summary for $(date +'%Y-%m-%d')"
           commit_options: '--amend'
-          file_pattern: 'docs/**'
-          add_options: '-u'
+          skip_add: true
           repository: '.'
           push_options: '--force'

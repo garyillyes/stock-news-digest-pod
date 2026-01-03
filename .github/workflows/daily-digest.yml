@@ -40,12 +40,14 @@ jobs:
         run: |
           python main.py
 
+      - name: Stage new files
+        run: git add docs/**
+
       - name: Commit and push new files
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Bot: Add daily news digest for $(date +'%Y-%m-%d')"
           commit_options: '--amend' # This will group all changes into the last commit, useful for re-runs
-          file_pattern: 'docs/**' # Only commit changes in the docs directory
-          add_options: '-u'
+          skip_add: true
           repository: '.'
           push_options: '--force'

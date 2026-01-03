@@ -27,11 +27,13 @@ jobs:
         run: |
           python cleanup.py
 
+      - name: Stage deleted files
+        run: git add -u docs/**
+
       - name: Commit and push deletions
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Bot: Cleanup old news digests"
-          file_pattern: 'docs/**'
-          add_options: '-u'
+          skip_add: true
           repository: '.'
           push_options: '--force'
