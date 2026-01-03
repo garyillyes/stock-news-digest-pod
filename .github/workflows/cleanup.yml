@@ -37,5 +37,5 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Bot: Cleanup old news digests"
-            git push --force
+            git push
           fi
