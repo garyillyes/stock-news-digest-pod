@@ -11,7 +11,7 @@ import alerter
 # --- Configuration ---
 CONFIG_FILE = "config.yml"
 OUTPUT_DIR = Path("docs")
-DIGEST_MODEL = "gemini-pro"
+DIGEST_MODEL = "models/gemini-pro-latest"
 
 # --- NEW: HTML Template with Audio Player ---
 HTML_TEMPLATE = """
