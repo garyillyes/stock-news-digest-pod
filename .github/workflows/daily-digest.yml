@@ -45,6 +45,6 @@ jobs:
         with:
           commit_message: "Bot: Add daily news digest for $(date +'%Y-%m-%d')"
           commit_options: '--amend' # This will group all changes into the last commit, useful for re-runs
-          file_pattern: 'docs/**' # Only commit changes in the docs directory
+          add_options: '-A' # Only commit changes in the docs directory
           repository: '.'
           push_options: '--force'
