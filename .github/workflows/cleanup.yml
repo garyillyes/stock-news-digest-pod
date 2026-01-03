@@ -31,7 +31,6 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Bot: Cleanup old news digests"
-          commit_options: '--amend'
-          file_pattern: 'docs/*'
+          file_pattern: 'docs/**'
           repository: '.'
           push_options: '--force'
