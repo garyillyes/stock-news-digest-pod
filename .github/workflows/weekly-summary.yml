@@ -42,6 +42,7 @@ jobs:
         with:
           commit_message: "Bot: Add weekly news summary for $(date +'%Y-%m-%d')"
           commit_options: '--amend'
-          add_options: '-A'
+          file_pattern: 'docs/**'
+          add_options: '-u'
           repository: '.'
           push_options: '--force'
