@@ -27,13 +27,15 @@ jobs:
         run: |
           python cleanup.py
 
-      - name: Stage deleted files
-        run: git add -u docs/**
-
       - name: Commit and push deletions
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Bot: Cleanup old news digests"
-          skip_add: true
-          repository: '.'
-          push_options: '--force'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u docs/**
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Bot: Cleanup old news digests"
+            git push --force
+          fi
