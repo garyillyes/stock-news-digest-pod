@@ -1,0 +1,275 @@
+import json
+import os
+import yaml
+import requests
+import google.generativeai as genai
+import markdown 
+from datetime import datetime, timedelta, UTC
+from pathlib import Path
+import alerter
+
+# --- Configuration ---
+CONFIG_FILE = "config.yml"
+OUTPUT_DIR = Path("docs")
+DIGEST_MODEL = "models/gemini-pro-latest"
+
+
+# --- Helper Functions ---
+
+def load_config(config_path):
+    """Loads the ticker configuration from the YAML file."""
+    print(f"Loading configuration from {config_path}...")
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    print(f"Loaded tickers: {config.get('tickers')}")
+    return config.get('tickers', [])
+
+def get_api_keys():
+    """Fetches required API keys from environment variables."""
+    print("Loading API keys from environment variables...")
+    keys = {
+        "alpaca_key": os.environ.get("ALPACA_API_KEY"),
+        "alpaca_secret": os.environ.get("ALPACA_API_SECRET"),
+        "gemini_key": os.environ.get("GEMINI_API_KEY"),
+        "discord_webhook_url": os.environ.get("DISCORD_WEBHOOK_URL"), # <-- Get Discord URL
+        "github_repo_url": os.environ.get("GITHUB_REPO_URL") # <-- Get GitHub Pages URL
+    }
+    if not all(keys.values()):
+        missing = [key for key, value in keys.items() if not value]
+        print(f"Error: Missing environment variables: {missing}")
+        raise ValueError(f"Missing environment variables: {missing}")
+    print("Successfully loaded all API keys.")
+    return keys
+
+def fetch_alpaca_news(tickers, alpaca_key, alpaca_secret):
+    """Fetches news from Alpaca API for the given tickers from the last 24 hours."""
+    print(f"Fetching news for tickers: {tickers}...")
+    
+    # Calculate time window (last 24 hours)
+    end_time = datetime.now(UTC)
+    start_time = end_time - timedelta(days=1)
+    
+    # Format for API
+    start_str = start_time.isoformat()
+    end_str = end_time.isoformat()
+    symbols_str = ",".join(tickers)
+    
+    url = "https://data.alpaca.markets/v1beta1/news"
+    headers = {
+        "Apca-Api-Key-Id": alpaca_key,
+        "Apca-Api-Secret-Key": alpaca_secret
+    }
+    params = {
+        "symbols": symbols_str,
+        "start": start_str,
+        "end": end_str,
+        "limit": 50, # Max news items per ticker
+        "include_content": True
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status() # Raise exception for bad status codes
+        
+        data = response.json()
+        news_items = data.get('news', [])
+        
+        print(f"Successfully fetched {len(news_items)} news articles.")
+        
+        # Consolidate news content into a structured list
+        structured_news = []
+        for item in news_items:
+            structured_news.append({
+                "headline": item["headline"],
+                "summary": item["summary"],
+                "symbols": item["symbols"]
+            })
+            
+        # Return as a JSON string for clear separation in the prompt
+        return json.dumps(structured_news, indent=2)
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching Alpaca news: {e}")
+        if e.response:
+            print(f"Response content: {e.response.text}")
+        return None
+
+def generate_digest_text(news_json, api_key):
+    """Generates a text digest using the Gemini API."""
+    if not news_json or news_json == "[]":
+        print("No news text provided, skipping digest.")
+        return "No significant news found for your tracked tickers in the last 24 hours."
+
+    print("Generating news digest with Gemini API...")
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(DIGEST_MODEL)
+    
+    prompt = f"""
+    You are a financial news analyst. Your task is to create a concise, informative, and engaging summary of the following financial news articles to be used as a script for a short audio podcast.
+    
+    Instructions:
+    1.  Start with a brief, professional welcome (e.g., "This is your daily financial briefing.").
+    2.  Provide a high-level overview of the market sentiment based on the news (e.g., "It was a mixed day for tech..." or "Positive news drove the energy sector...").
+    3.  Summarize the 3-5 most important stories. For each, clearly state the company and the key news.
+    4.  **Crucially**, for each story, add a brief, insightful sentence explaining *why* this news is relevant to the specific stock tickers associated with it. For example: "This development is significant for GOOGL as it directly impacts their AI research division."
+    5.  Keep the entire script to a 2-4 minute read (around 400-600 words).
+    6.  End with a brief sign-off (e.g., "That's all for today. Check back tomorrow for your next update.").
+    7.  The tone should be professional, clear, and unbiased.
+    8.  **IMPORTANT:** Format your response in Markdown (e.g., use `###` for headlines, `**bold**` for emphasis, and paragraphs). This text will be displayed on a webpage alongside the audio.
+    
+    Here is the raw news content, formatted as a JSON array. Each object contains the headline, summary, and the stock symbols it relates to.
+    ---
+    {news_json}
+    ---
+    End of raw news. Now, please generate the podcast script.
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        digest = response.text
+        print("Successfully generated news digest text.")
+        return digest
+    except Exception as e:
+        print(f"Error generating Gemini digest: {e}")
+        return None
+
+
+
+def main():
+    """Main function to run the news digest process."""
+    print("--- Starting Daily News Digest ---")
+    
+    # 1. Load Config & Keys
+    try:
+        tickers = load_config(CONFIG_FILE)
+        api_keys = get_api_keys()
+    except Exception as e:
+        print(f"Failed to load configuration or API keys: {e}")
+        return
+
+    # 2. Fetch News
+    news_json = fetch_alpaca_news(
+        tickers, 
+        api_keys["alpaca_key"], 
+        api_keys["alpaca_secret"]
+    )
+    if not news_json:
+        print("No news fetched. Creating a minimal digest and exiting.")
+        news_json = "[]" # Ensure it's a valid JSON string for parsing
+
+    # 3. Generate Digest Text
+    digest_text = generate_digest_text(news_json, api_keys["gemini_key"])
+    if not digest_text:
+        print("Failed to generate digest text. Exiting.")
+        return
+        
+    # 4. Save HTML page
+    today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+    target_dir = OUTPUT_DIR / today_str
+    target_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Define file paths
+    html_path = target_dir / "index.html" # Final HTML page
+    
+    title = f"Daily Financial Digest - {today_str}"
+
+    print(f"Saving files to {target_dir}...")
+
+    # Convert the digest's Markdown to HTML
+    content_html = markdown.markdown(digest_text, extensions=['fenced_code', 'tables'])
+    
+    # Populate the template
+    final_html = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title}</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            background-color: #f6f8fa;
+            color: #24292e;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #d1d5da;
+        }}
+        h1 {{
+            color: #0366d6;
+            border-bottom: 2px solid #e1e4e8;
+            padding-bottom: 10px;
+        }}
+        .content {{
+            margin-top: 25px;
+        }}
+        .content h2, .content h3 {{
+            border-bottom: 1px solid #e1e4e8;
+            padding-bottom: 5px;
+        }}
+        .content p {{
+            margin-bottom: 15px;
+        }}
+        .content pre {{
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #d1d5da;
+            overflow-x: auto;
+        }}
+        .content blockquote {{
+            color: #586069;
+            border-left: 4px solid #d1d5da;
+            padding-left: 15px;
+            margin-left: 0;
+        }}
+        footer {{
+            margin-top: 30px;
+            font-size: 0.9em;
+            color: #586069;
+            text-align: center;
+        }}
+    </style>
+</head>
+<body>
+    <h1>{title}</h1>
+
+    <div class="content">
+        {content_html}
+    </div>
+
+    <footer>
+        Generated by Stock News Digest Bot
+    </footer>
+</body>
+</html>
+"""
+    
+    with open(html_path, 'w', encoding='utf-8') as f:
+        f.write(final_html)
+    print(f"Successfully saved HTML page: {html_path}")
+
+    print("--- Daily News Digest Finished Successfully ---")
+    
+    # 5. Send Discord Notification
+    try:
+        # The URL to the directory will automatically serve index.html
+        pages_url = f"{api_keys['github_repo_url']}/{today_str}"
+
+        message = f"View the latest report."
+        title = "📈 Your Daily Financial Digest is Ready!"
+        
+        alerter.send_discord_alert(
+            api_keys["discord_webhook_url"],
+            message,
+            title,
+            url=pages_url 
+        )
+    except Exception as e:
+        print(f"Failed to send Discord notification: {e}")
+
+if __name__ == "__main__":
+    main()
