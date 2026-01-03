@@ -1,0 +1,6 @@
+# Core libraries needed to run the main.py script
+requests
+PyYAML
+google-generativeai # For Gemini API
+markdown # For converting digest markdown to HTML
+beautifulsoup4 # For parsing HTML in the weekly summary
