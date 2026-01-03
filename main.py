@@ -2,7 +2,7 @@ import json
 import os
 import yaml
 import requests
-import google.generativeai as genai
+import google.genai as genai
 import markdown 
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
@@ -11,7 +11,7 @@ import alerter
 # --- Configuration ---
 CONFIG_FILE = "config.yml"
 OUTPUT_DIR = Path("docs")
-DIGEST_MODEL = "gemini-1.5-flash"
+DIGEST_MODEL = "gemini-pro"
 
 # --- NEW: HTML Template with Audio Player ---
 HTML_TEMPLATE = """

@@ -1,6 +1,6 @@
 import os
 import yaml
-import google.generativeai as genai
+import google.genai as genai
 import markdown
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 # --- Configuration ---
 CONFIG_FILE = "config.yml"
 OUTPUT_DIR = Path("docs")
-DIGEST_MODEL = "gemini-1.5-flash"
+DIGEST_MODEL = "gemini-pro"
 HISTORY_DAYS = 14
 
 # --- NEW: HTML Template ---
