@@ -3,18 +3,19 @@ import os
 import yaml
 import requests
 import google.generativeai as genai
-import markdown # <-- For HTML conversion
+import markdown 
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
+from pydub import AudioSegment 
 import alerter
 
 # --- Configuration ---
 CONFIG_FILE = "config.yml"
 OUTPUT_DIR = Path("docs")
 DIGEST_MODEL = "gemini-1.5-flash"
+TTS_MODEL = "tts-1" 
 
-# --- NEW: HTML Template ---
-# A simple, clean HTML template.
+# --- NEW: HTML Template with Audio Player ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -38,6 +39,13 @@ HTML_TEMPLATE = """
             color: #0366d6;
             border-bottom: 2px solid #e1e4e8;
             padding-bottom: 10px;
+        }}
+        /* Style the audio player */
+        audio {{
+            width: 100%;
+            margin-top: 20px;
+            border-radius: 5px;
+            border: 1px solid #d1d5da;
         }}
         .content {{
             margin-top: 25px;
@@ -72,6 +80,12 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <h1>{title}</h1>
+
+    <!-- Simple audio player -->
+    <audio controls>
+        <source src="{audio_file_path}" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
 
     <div class="content">
         {content_html}
@@ -164,9 +178,9 @@ def fetch_alpaca_news(tickers, alpaca_key, alpaca_secret):
             print(f"Response content: {e.response.text}")
         return None
 
-def generate_digest(news_text, api_key):
-    """Generates a digest using the Gemini API."""
-    if not news_text:
+def generate_digest_text(news_json, api_key):
+    """Generates a text digest using the Gemini API."""
+    if not news_json or news_json == "[]":
         print("No news text provided, skipping digest.")
         return "No significant news found for your tracked tickers in the last 24 hours."
 
@@ -175,37 +189,76 @@ def generate_digest(news_text, api_key):
     model = genai.GenerativeModel(DIGEST_MODEL)
     
     prompt = f"""
-    You are a financial news analyst. Your task is to create a concise, informative, and engaging summary of the following financial news articles.
+    You are a financial news analyst. Your task is to create a concise, informative, and engaging summary of the following financial news articles to be used as a script for a short audio podcast.
     
     Instructions:
     1.  Start with a brief, professional welcome (e.g., "This is your daily financial briefing.").
     2.  Provide a high-level overview of the market sentiment based on the news (e.g., "It was a mixed day for tech..." or "Positive news drove the energy sector...").
     3.  Summarize the 3-5 most important stories. For each, clearly state the company and the key news.
     4.  **Crucially**, for each story, add a brief, insightful sentence explaining *why* this news is relevant to the specific stock tickers associated with it. For example: "This development is significant for GOOGL as it directly impacts their AI research division."
-    5.  Keep the entire script to a 3-5 minute read (around 500-750 words).
+    5.  Keep the entire script to a 2-4 minute read (around 400-600 words).
     6.  End with a brief sign-off (e.g., "That's all for today. Check back tomorrow for your next update.").
     7.  The tone should be professional, clear, and unbiased.
-    8.  **IMPORTANT:** Format your response in Markdown (e.g., use `###` for headlines, `**bold**` for emphasis, and paragraphs).
+    8.  **IMPORTANT:** Format your response in Markdown (e.g., use `###` for headlines, `**bold**` for emphasis, and paragraphs). This text will be displayed on a webpage alongside the audio.
     
     Here is the raw news content, formatted as a JSON array. Each object contains the headline, summary, and the stock symbols it relates to.
     ---
-    {news_text}
+    {news_json}
     ---
-    End of raw news. Now, please generate the digest.
+    End of raw news. Now, please generate the podcast script.
     """
     
     try:
         response = model.generate_content(prompt)
         digest = response.text
-        print("Successfully generated news digest.")
+        print("Successfully generated news digest text.")
         return digest
     except Exception as e:
         print(f"Error generating Gemini digest: {e}")
         return None
 
+def generate_audio(text_to_read, api_key, output_path):
+    """Generates audio from text using the Gemini TTS API and saves it as a WAV file."""
+    print(f"Generating audio with Gemini TTS API for: '{text_to_read[:50]}...'")
+    genai.configure(api_key=api_key)
+    
+    try:
+        # Generate audio using the new TTS model
+        response = genai.text_to_audio(
+            model=TTS_MODEL,
+            text=text_to_read,
+        )
+        
+        # Save the raw audio data
+        with open(output_path, 'wb') as f:
+            f.write(response['audio_content'])
+        
+        print(f"Successfully saved WAV audio to {output_path}")
+        return output_path
+        
+    except Exception as e:
+        print(f"Error generating Gemini TTS audio: {e}")
+        return None
+
+def convert_to_mp3(input_path, output_path):
+    """Converts a WAV file to MP3 format using pydub."""
+    print(f"Converting {input_path} to MP3...")
+    try:
+        # Load the WAV file
+        audio = AudioSegment.from_wav(input_path)
+        
+        # Export as MP3 with a reasonable bitrate
+        audio.export(output_path, format="mp3", bitrate="128k")
+        
+        print(f"Successfully converted to MP3: {output_path}")
+        return output_path
+    except Exception as e:
+        print(f"Error converting to MP3: {e}")
+        return None
+
 def main():
     """Main function to run the news digest process."""
-    print("--- Starting Daily News Digest ---")
+    print("--- Starting Daily News Digest Podcast ---")
     
     # 1. Load Config & Keys
     try:
@@ -216,62 +269,87 @@ def main():
         return
 
     # 2. Fetch News
-    news_text = fetch_alpaca_news(
+    news_json = fetch_alpaca_news(
         tickers, 
         api_keys["alpaca_key"], 
         api_keys["alpaca_secret"]
     )
-    if not news_text:
-        print("No news fetched. Exiting.")
-        news_text = "No news found for tracked tickers." # Create a minimal digest
+    if not news_json:
+        print("No news fetched. Creating a minimal digest and exiting.")
+        news_json = "[]" # Ensure it's a valid JSON string for parsing
 
-    # 3. Generate Digest
-    digest_text = generate_digest(news_text, api_keys["gemini_key"])
+    # 3. Generate Digest Text
+    digest_text = generate_digest_text(news_json, api_keys["gemini_key"])
     if not digest_text:
-        print("Failed to generate digest. Exiting.")
+        print("Failed to generate digest text. Exiting.")
         return
+        
+    # --- NEW: Audio Generation Steps ---
+    
+    # Create a "plain text" version of the digest for the TTS model
+    # (Removing Markdown for better pronunciation)
+    plain_text_for_tts = digest_text.replace('###', '').replace('**', '')
 
-    # 4. Save Files
     today_str = datetime.now(UTC).strftime("%Y-%m-%d")
     target_dir = OUTPUT_DIR / today_str
     target_dir.mkdir(parents=True, exist_ok=True)
     
     # Define file paths
+    wav_path = target_dir / "podcast_raw.wav"
+    mp3_path = target_dir / "podcast.mp3" # Final audio file
     html_path = target_dir / "index.html" # Final HTML page
+    
+    # 4. Generate Raw Audio
+    if not generate_audio(plain_text_for_tts, api_keys["gemini_key"], wav_path):
+        print("Failed to generate WAV audio. Exiting.")
+        return
+        
+    # 5. Convert Audio to MP3
+    if not convert_to_mp3(wav_path, mp3_path):
+        print("Failed to convert to MP3. Exiting.")
+        return
+    
+    # 6. Clean up raw WAV file
+    try:
+        os.remove(wav_path)
+        print(f"Cleaned up raw file: {wav_path}")
+    except OSError as e:
+        print(f"Error deleting raw WAV file: {e}")
+
+    # 7. Save HTML page
+    print(f"Saving files to {target_dir}...")
     
     title = f"Daily Financial Digest - {today_str}"
 
-    print(f"Saving files to {target_dir}...")
-
-    # 5. Save HTML page
     # Convert the digest's Markdown to HTML
     content_html = markdown.markdown(digest_text, extensions=['fenced_code', 'tables'])
     
     # Populate the template
     final_html = HTML_TEMPLATE.format(
         title=title,
-        content_html=content_html
+        content_html=content_html,
+        audio_file_path="podcast.mp3" # Relative path for the HTML file
     )
     
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(final_html)
     print(f"Successfully saved HTML page: {html_path}")
 
-    print("--- Daily News Digest Finished Successfully ---")
+    print("--- Daily News Digest Podcast Finished Successfully ---")
     
-    # 6. Send Discord Notification
+    # 8. Send Discord Notification
     try:
         # The URL to the directory will automatically serve index.html
         pages_url = f"{api_keys['github_repo_url']}/{today_str}"
 
-        message = f"View the latest report."
-        title = "📈 Your Daily Financial Digest is Ready!"
+        message = f"Listen to the latest audio report or read the transcript."
+        title = "📈 Your Daily Financial Podcast is Ready!"
         
         alerter.send_discord_alert(
             api_keys["discord_webhook_url"],
             message,
             title,
-            url=pages_url # Pass the URL to make the title clickable (now points to the HTML page)
+            url=pages_url 
         )
     except Exception as e:
         print(f"Failed to send Discord notification: {e}")
