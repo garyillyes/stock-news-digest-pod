@@ -6,14 +6,12 @@ import google.generativeai as genai
 import markdown 
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
-from pydub import AudioSegment 
 import alerter
 
 # --- Configuration ---
 CONFIG_FILE = "config.yml"
 OUTPUT_DIR = Path("docs")
 DIGEST_MODEL = "gemini-1.5-flash"
-TTS_MODEL = "tts-1" 
 
 # --- NEW: HTML Template with Audio Player ---
 HTML_TEMPLATE = """
@@ -39,13 +37,6 @@ HTML_TEMPLATE = """
             color: #0366d6;
             border-bottom: 2px solid #e1e4e8;
             padding-bottom: 10px;
-        }}
-        /* Style the audio player */
-        audio {{
-            width: 100%;
-            margin-top: 20px;
-            border-radius: 5px;
-            border: 1px solid #d1d5da;
         }}
         .content {{
             margin-top: 25px;
@@ -80,12 +71,6 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <h1>{title}</h1>
-
-    <!-- Simple audio player -->
-    <audio controls>
-        <source src="{audio_file_path}" type="audio/mpeg">
-        Your browser does not support the audio element.
-    </audio>
 
     <div class="content">
         {content_html}
@@ -217,48 +202,11 @@ def generate_digest_text(news_json, api_key):
         print(f"Error generating Gemini digest: {e}")
         return None
 
-def generate_audio(text_to_read, api_key, output_path):
-    """Generates audio from text using the Gemini TTS API and saves it as a WAV file."""
-    print(f"Generating audio with Gemini TTS API for: '{text_to_read[:50]}...'")
-    genai.configure(api_key=api_key)
-    
-    try:
-        # Generate audio using the new TTS model
-        response = genai.text_to_audio(
-            model=TTS_MODEL,
-            text=text_to_read,
-        )
-        
-        # Save the raw audio data
-        with open(output_path, 'wb') as f:
-            f.write(response['audio_content'])
-        
-        print(f"Successfully saved WAV audio to {output_path}")
-        return output_path
-        
-    except Exception as e:
-        print(f"Error generating Gemini TTS audio: {e}")
-        return None
 
-def convert_to_mp3(input_path, output_path):
-    """Converts a WAV file to MP3 format using pydub."""
-    print(f"Converting {input_path} to MP3...")
-    try:
-        # Load the WAV file
-        audio = AudioSegment.from_wav(input_path)
-        
-        # Export as MP3 with a reasonable bitrate
-        audio.export(output_path, format="mp3", bitrate="128k")
-        
-        print(f"Successfully converted to MP3: {output_path}")
-        return output_path
-    except Exception as e:
-        print(f"Error converting to MP3: {e}")
-        return None
 
 def main():
     """Main function to run the news digest process."""
-    print("--- Starting Daily News Digest Podcast ---")
+    print("--- Starting Daily News Digest ---")
     
     # 1. Load Config & Keys
     try:
@@ -284,42 +232,17 @@ def main():
         print("Failed to generate digest text. Exiting.")
         return
         
-    # --- NEW: Audio Generation Steps ---
-    
-    # Create a "plain text" version of the digest for the TTS model
-    # (Removing Markdown for better pronunciation)
-    plain_text_for_tts = digest_text.replace('###', '').replace('**', '')
-
+    # 4. Save HTML page
     today_str = datetime.now(UTC).strftime("%Y-%m-%d")
     target_dir = OUTPUT_DIR / today_str
     target_dir.mkdir(parents=True, exist_ok=True)
     
     # Define file paths
-    wav_path = target_dir / "podcast_raw.wav"
-    mp3_path = target_dir / "podcast.mp3" # Final audio file
     html_path = target_dir / "index.html" # Final HTML page
     
-    # 4. Generate Raw Audio
-    if not generate_audio(plain_text_for_tts, api_keys["gemini_key"], wav_path):
-        print("Failed to generate WAV audio. Exiting.")
-        return
-        
-    # 5. Convert Audio to MP3
-    if not convert_to_mp3(wav_path, mp3_path):
-        print("Failed to convert to MP3. Exiting.")
-        return
-    
-    # 6. Clean up raw WAV file
-    try:
-        os.remove(wav_path)
-        print(f"Cleaned up raw file: {wav_path}")
-    except OSError as e:
-        print(f"Error deleting raw WAV file: {e}")
-
-    # 7. Save HTML page
-    print(f"Saving files to {target_dir}...")
-    
     title = f"Daily Financial Digest - {today_str}"
+
+    print(f"Saving files to {target_dir}...")
 
     # Convert the digest's Markdown to HTML
     content_html = markdown.markdown(digest_text, extensions=['fenced_code', 'tables'])
@@ -327,23 +250,22 @@ def main():
     # Populate the template
     final_html = HTML_TEMPLATE.format(
         title=title,
-        content_html=content_html,
-        audio_file_path="podcast.mp3" # Relative path for the HTML file
+        content_html=content_html
     )
     
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(final_html)
     print(f"Successfully saved HTML page: {html_path}")
 
-    print("--- Daily News Digest Podcast Finished Successfully ---")
+    print("--- Daily News Digest Finished Successfully ---")
     
-    # 8. Send Discord Notification
+    # 5. Send Discord Notification
     try:
         # The URL to the directory will automatically serve index.html
         pages_url = f"{api_keys['github_repo_url']}/{today_str}"
 
-        message = f"Listen to the latest audio report or read the transcript."
-        title = "📈 Your Daily Financial Podcast is Ready!"
+        message = f"View the latest report."
+        title = "📈 Your Daily Financial Digest is Ready!"
         
         alerter.send_discord_alert(
             api_keys["discord_webhook_url"],
