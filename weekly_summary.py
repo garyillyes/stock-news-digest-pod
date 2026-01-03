@@ -158,6 +158,14 @@ def generate_weekly_summary(digests_content, api_key):
         print(f"Error generating Gemini summary: {e}")
         return None
 
+def list_models(api_key):
+    """Lists available Gemini models."""
+    print("Listing available Gemini models...")
+    genai.configure(api_key=api_key)
+    for m in genai.list_models():
+        if 'generateContent' in m.supported_generation_methods:
+            print(m.name)
+
 def main():
     """Main function to run the weekly summary generation process."""
     print("--- Starting Weekly News Summary ---")
@@ -168,6 +176,9 @@ def main():
     except Exception as e:
         print(f"Failed to load API keys: {e}")
         return
+
+    # Debugging: List available models
+    list_models(api_keys["gemini_key"])
 
     # 2. Get Past Digests' Content
     digests_content = get_past_digests_content()
