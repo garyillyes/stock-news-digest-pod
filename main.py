@@ -1,12 +1,9 @@
+import json
 import os
 import yaml
 import requests
 import google.generativeai as genai
-import base64
-import wave
-import json
 import markdown # <-- For HTML conversion
-from pydub import AudioSegment # <-- For MP3 conversion
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
 import alerter
@@ -14,13 +11,10 @@ import alerter
 # --- Configuration ---
 CONFIG_FILE = "config.yml"
 OUTPUT_DIR = Path("docs")
-DIGEST_MODEL = "gemini-2.5-flash-preview-09-2025"
-TTS_MODEL = "gemini-2.5-flash-preview-tts"
-PODCAST_VOICE = "Laomedeia" # https://docs.cloud.google.com/text-to-speech/docs/gemini-tts
-PODCAST_PROMPT_PREFIX = f"Say this in an informative, clear, and professional tone, like a news podcaster. Use the {PODCAST_VOICE} voice:"
+DIGEST_MODEL = "gemini-1.5-flash"
 
 # --- NEW: HTML Template ---
-# A simple, clean HTML template with an audio player.
+# A simple, clean HTML template.
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -44,12 +38,6 @@ HTML_TEMPLATE = """
             color: #0366d6;
             border-bottom: 2px solid #e1e4e8;
             padding-bottom: 10px;
-        }}
-        audio {{
-            width: 100%;
-            margin-top: 20px;
-            border-radius: 5px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
         }}
         .content {{
             margin-top: 25px;
@@ -84,11 +72,6 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <h1>{title}</h1>
-    
-    <audio controls>
-        <source src="{audio_file_path}" type="audio/mpeg">
-        Your browser does not support the audio element.
-    </audio>
 
     <div class="content">
         {content_html}
@@ -182,7 +165,7 @@ def fetch_alpaca_news(tickers, alpaca_key, alpaca_secret):
         return None
 
 def generate_digest(news_text, api_key):
-    """Generates a podcast script digest using the Gemini API."""
+    """Generates a digest using the Gemini API."""
     if not news_text:
         print("No news text provided, skipping digest.")
         return "No significant news found for your tracked tickers in the last 24 hours."
@@ -192,7 +175,7 @@ def generate_digest(news_text, api_key):
     model = genai.GenerativeModel(DIGEST_MODEL)
     
     prompt = f"""
-    You are a financial news podcaster. Your task is to create a concise, informative, and engaging podcast script summarizing the following financial news articles.
+    You are a financial news analyst. Your task is to create a concise, informative, and engaging summary of the following financial news articles.
     
     Instructions:
     1.  Start with a brief, professional welcome (e.g., "This is your daily financial briefing.").
@@ -208,7 +191,7 @@ def generate_digest(news_text, api_key):
     ---
     {news_text}
     ---
-    End of raw news. Now, please generate the podcast script.
+    End of raw news. Now, please generate the digest.
     """
     
     try:
@@ -219,80 +202,6 @@ def generate_digest(news_text, api_key):
     except Exception as e:
         print(f"Error generating Gemini digest: {e}")
         return None
-
-def save_pcm_to_wav(pcm_data, sample_rate, output_path):
-    """Saves raw PCM16 audio data to a temporary WAV file."""
-    # This is now an intermediate step
-    print(f"Saving temporary WAV file to {output_path}...")
-    try:
-        # The API returns signed 16-bit PCM data
-        with wave.open(str(output_path), 'wb') as wf:
-            wf.setnchannels(1)  # Mono
-            wf.setsampwidth(2)  # 16 bits = 2 bytes
-            wf.setframerate(sample_rate)
-            wf.writeframes(pcm_data)
-        print("Successfully saved temporary WAV file.")
-    except Exception as e:
-        print(f"Error saving WAV file: {e}")
-
-def convert_wav_to_mp3(wav_path, mp3_path):
-    """Converts a WAV file to MP3 using pydub."""
-    print(f"Converting {wav_path} to {mp3_path}...")
-    try:
-        audio = AudioSegment.from_wav(wav_path)
-        audio.export(mp3_path, format="mp3", bitrate="128k")
-        print(f"Successfully converted to {mp3_path}.")
-    except Exception as e:
-        print(f"Error converting to MP3: {e}")
-
-def generate_audio(digest_text, api_key):
-    """Generates audio from the digest using Gemini TTS API."""
-    if not digest_text:
-        print("No digest text, skipping audio generation.")
-        return None, None
-        
-    print("Generating audio with Gemini TTS API...")
-    genai.configure(api_key=api_key)
-    
-    # Use the 'gemini-2.5-flash-preview-tts' model
-    model = genai.GenerativeModel(TTS_MODEL)
-
-    try:
-        # Construct the prompt with speech control
-        tts_prompt = f"{PODCAST_PROMPT_PREFIX}\n\n{digest_text}"
-        
-        # Create the generation config as a plain Python dictionary
-        tts_config = {
-            "response_modalities": ["AUDIO"],
-            "speech_config": {
-                "voice_config": {
-                    "prebuilt_voice_config": {
-                        "voice_name": PODCAST_VOICE
-                    }
-                }
-            }
-        }
-
-        # Call the API, passing the dictionary as the generation_config
-        response = model.generate_content(
-            contents=[tts_prompt],
-            generation_config=tts_config
-        )
-        
-        # Extract audio data and sample rate
-        audio_part = response.candidates[0].content.parts[0]
-        pcm_data = audio_part.inline_data.data
-        mime_type = audio_part.inline_data.mime_type
-        
-        # Extract sample rate from mime_type (e.g., "audio/L16;rate=24000")
-        sample_rate = int(mime_type.split('rate=')[-1])
-        
-        print(f"Successfully generated audio data (Sample Rate: {sample_rate}).")
-        return pcm_data, sample_rate
-
-    except Exception as e:
-        print(f"Error generating Gemini TTS audio: {e}")
-        return None, None
 
 def main():
     """Main function to run the news digest process."""
@@ -322,45 +231,25 @@ def main():
         print("Failed to generate digest. Exiting.")
         return
 
-    # 4. Generate Audio
-    pcm_data, sample_rate = generate_audio(digest_text, api_keys["gemini_key"])
-    if not pcm_data:
-        print("Failed to generate audio. Exiting.")
-        return
-
-    # 5. Save Files
+    # 4. Save Files
     today_str = datetime.now(UTC).strftime("%Y-%m-%d")
     target_dir = OUTPUT_DIR / today_str
     target_dir.mkdir(parents=True, exist_ok=True)
     
     # Define file paths
-    temp_wav_path = target_dir / "podcast.wav" # Temporary file
-    final_mp3_path = target_dir / "podcast.mp3" # Final file
     html_path = target_dir / "index.html" # Final HTML page
     
     title = f"Daily Financial Digest - {today_str}"
 
     print(f"Saving files to {target_dir}...")
-    
-    # 5a. Save and convert audio
-    save_pcm_to_wav(pcm_data, sample_rate, temp_wav_path)
-    convert_wav_to_mp3(temp_wav_path, final_mp3_path)
-    
-    # 5b. Clean up temporary WAV file
-    try:
-        os.remove(temp_wav_path)
-        print(f"Removed temporary file: {temp_wav_path}")
-    except OSError as e:
-        print(f"Error removing temporary file: {e}")
 
-    # 5c. Save HTML page
+    # 5. Save HTML page
     # Convert the digest's Markdown to HTML
     content_html = markdown.markdown(digest_text, extensions=['fenced_code', 'tables'])
     
     # Populate the template
     final_html = HTML_TEMPLATE.format(
         title=title,
-        audio_file_path="podcast.mp3", # Relative path for the HTML player
         content_html=content_html
     )
     
@@ -374,13 +263,9 @@ def main():
     try:
         # The URL to the directory will automatically serve index.html
         pages_url = f"{api_keys['github_repo_url']}/{today_str}"
-        
-        # We can still link to the MP3 directly if we want
-        podcast_url = f"{pages_url}/podcast.mp3"
-        podcast_link = f"[listen to the podcast]({podcast_url})"
 
-        message = f"View the latest report and {podcast_link}."
-        title = "🎙️ Your Daily Financial Digest is Ready!"
+        message = f"View the latest report."
+        title = "📈 Your Daily Financial Digest is Ready!"
         
         alerter.send_discord_alert(
             api_keys["discord_webhook_url"],

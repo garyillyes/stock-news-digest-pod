@@ -1,17 +1,13 @@
-# Stock News Digest Podcast Bot
+# Stock News Digest Bot
 
-This project automates the creation of a daily "podcast" (MP3 audio file)
-and a web page to host it. It uses GitHub Actions to run a Python script
-once a day. This script:
+This project automates the creation of a daily stock news digest and a web page to host it. It uses GitHub Actions to run a Python script once a day. This script:
 
 1. Fetches news from the Alpaca News API.
 2. Generates a text digest (in Markdown) of the news using the Gemini API.
-3. Generates an audio version of the digest using the Gemini TTS API.
-4. Converts the raw .wav audio to a compressed .mp3 file.
-5. Creates a simple index.html page to host the text and the audio player.
-6. Commits the index.html and podcast.mp3 files to the /docs directory.
-7. Sends a notification to a Discord channel with a link to the new digest page.
-8. A separate GitHub Action runs monthly to clean up old digests.
+3. Creates a simple index.html page to host the text.
+4. Commits the index.html file to the /docs directory.
+5. Sends a notification to a Discord channel with a link to the new digest page.
+6. A separate GitHub Action runs monthly to clean up old digests.
 
 ## Directory Structure
 
@@ -23,13 +19,12 @@ once a day. This script:
 │       └── cleanup.yml        (GitHub Action to run monthly and delete old files)
 ├── docs/
 │   ├── YYYY-MM-DD/            (New directory created daily)
-│   │   ├── index.html         (The web page with text and audio player)
-│   │   └── podcast.mp3        (The compressed audio file for the day)
+│   │   └── index.html         (The web page with text)
 │   └── index.md               (Placeholder for the /docs directory)
 ├── .gitignore
 ├── alerter.py                 (Python script to send Discord alerts)
 ├── config.yml                 (Your configuration file: add/remove stock tickers here)
-├── main.py                    (The main Python script: fetches, generates, converts, builds)
+├── main.py                    (The main Python script: fetches, generates, builds)
 ├── cleanup.py                 (Python script to delete digests older than 30 days)
 └── requirements.txt           (The Python libraries needed for the project)
 ```

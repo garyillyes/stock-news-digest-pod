@@ -32,6 +32,6 @@ jobs:
         with:
           commit_message: "Bot: Cleanup old news digests"
           commit_options: '--amend'
-          file_pattern: 'pages/*'
+          file_pattern: 'docs/*'
           repository: '.'
           push_options: '--force'
