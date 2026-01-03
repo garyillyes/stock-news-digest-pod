@@ -26,6 +26,9 @@ jobs:
       - name: Run cleanup script
         run: |
           python cleanup.py
+      
+      - name: Check git status
+        run: git status --porcelain
 
       - name: Commit and push deletions
         uses: stefanzweifel/git-auto-commit-action@v5
