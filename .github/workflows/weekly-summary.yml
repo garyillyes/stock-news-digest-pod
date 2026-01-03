@@ -41,11 +41,17 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add docs/$(date +'%Y-%m-%d')
-          # Check if there are any changes to commit
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
+          git checkout main
+          FILE_PATH="docs/$(date +'%Y-%m-%d')/weekly_summary.html"
+          if [ -f "$FILE_PATH" ]; then
+            git add "$FILE_PATH"
+            # Check if there are any changes to commit
+            if git diff --staged --quiet; then
+              echo "No changes to commit"
+            else
+              git commit -m "Bot: Add weekly news summary for $(date +'%Y-%m-%d')"
+              git push
+            fi
           else
-            git commit -m "Bot: Add weekly news summary for $(date +'%Y-%m-%d')"
-            git push
+            echo "File not found, skipping commit: $FILE_PATH"
           fi

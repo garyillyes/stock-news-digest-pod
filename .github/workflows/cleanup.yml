@@ -31,7 +31,8 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -u docs/**
+          git checkout main
+          git add -u docs
           # Check if there are any changes to commit
           if git diff --staged --quiet; then
             echo "No changes to commit"
