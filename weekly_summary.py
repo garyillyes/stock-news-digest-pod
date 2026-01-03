@@ -1,6 +1,6 @@
 import os
 import yaml
-import google.genai as genai
+import google.generativeai as genai
 import markdown
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
